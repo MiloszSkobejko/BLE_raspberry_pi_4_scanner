@@ -1,5 +1,6 @@
-# 5G_Drone BLE Module on Raspberry Pi 4 (Model B)
-This repo contains configuration and source files for bluetooth low energy raspberry pi. 
+#Bluetooth Low Energy Scanner on Raspberry Pi 4 (Model B)
+This repo contains configuration and source files for bluetooth low energy raspberry pi.
+
 
 ## Getting started
 Please check if your device has bluez as well as bluepy installed. if not, you can install bluez using:
