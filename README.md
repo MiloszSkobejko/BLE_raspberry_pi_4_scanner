@@ -1,17 +1,27 @@
-# 5G_Drone
-This repo contains configuration and source files for land-drone device. Drone is equipped with different types of data transmitters and receivers as 5G, WiFi, LoraWAN and Bluetooth Low Energy.  Main purpose is being a portable range extender for listed technologies. 
+# 5G_Drone BLE Module on Raspberry Pi 4 (Model B)
+This repo contains configuration and source files for bluetooth low energy raspberry pi. 
 
-## Installing Raspberri Pi 4 image on your device.
-In case if you don't have ready to work raspberry pi, you can install my image with bluetooth le configured and (presumably) working.
-OS image is in the Image folder, follow official raspberry pi instruction in order to install it:
-[link]
+## Getting started
+Please check if your device has bluez as well as bluepy installed. if not, you can install bluez using:
+```
+sudo apt-get install bluez
+sudo apt-get install libglib2.0-dev
+```
+and bluepy:
+```
+sudo pip install bluepy
+```
+These are all packages you'll need in order to get started with ble.
 
-## Installing only Bluetooth Low Energy module
-If you have your own image already installed and don't want to change it, script below will install all important libraries and modules on your device.
 
+## How to use
+Run script with scan time parameters (in seconds). Json file with results will be created in the same location as where script is executed.
 
-## BLE Remaining Tasks
-- [ ] add raspberri pi image
-- [ ] add ble config files (bash script that download bluez as well as bluepy)
-- [ ] add ble source files
-- [ ] create server that checks if collected by ble files has been correctly sent 
+```
+./ble.py --time 60
+```
+
+If you want to scan inifinitly long, run:
+```
+./ble.py --time inf
+```
