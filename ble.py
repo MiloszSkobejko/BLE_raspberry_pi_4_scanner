@@ -27,10 +27,11 @@
 import sys
 import json
 import time
-sys.path.append("/home/dron5g/.local/lib/python3.9/site-packages")
+import os.path
+import argparse
+#sys.path.append("/home/dron5g/.local/lib/python3.9/site-packages")
 
 from bluepy.btle import Scanner, DefaultDelegate
-from pygments import highlight, lexers, formatters
 
 class ScanDelegate(DefaultDelegate):
     def __init__(self):
@@ -39,48 +40,71 @@ class ScanDelegate(DefaultDelegate):
     def handleDiscovery(self, dev, isNewDev, isNewData):
         if isNewDev:
             print(f"Nowe urzadzenie: {dev.addr}")
+            save_to_file(dev)
         elif isNewData:
             print(f"Orzymano nowe dane od urządzenia: {dev.addr}")
 
+
+
+def save_to_file(device):
+    filename = "devices.json"
+    name = ""
+    power = ""
+    
+    # Raw data reserialise
+    for (adtype, desc, value) in device.getScanData():
+        if (desc == "Nazwa urządzenia"):
+            name = str(value)
+        elif (desc == "Tx Power"):
+            power = str(value)
+    
+    # Raw data reserialise for JSON
+    rdata = str(device.rawData)
+    
+    #Sprawdz, czy plik juz istnieje
+    if os.path.exists(filename):
+        with open(filename, 'r') as file:
+            data = json.load(file)
+        
+        # Czy dane urządzenie już zostało dodane
+        if not any(entry['addr'] == device.addr for entry in data):
+            data.append({'addr': device.addr, 'addType': device.addrType, 'rssi': device.rssi, 'desc': desc, 'raw data': rdata, 'power': power, 'value': value, 'adType': adtype, 'connectable': device.connectable})
+            with open(filename, 'w') as file:
+                json.dump(data, file, indent=4)
+    else:
+        # Jesli plik nie istnieje to stwórz go i zapisz ponownie:
+        with open(filename, 'w') as file:
+            json.dump([{'addr': device.addr, 'addType': device.addrType, 'rssi': device.rssi, 'desc': desc, 'raw data': rdata, 'power': power, 'value': value, 'adType': adtype, 'connectable': device.connectable}], file, indent=4)
+
+
+
 def main(args):
+    parser = argparse.ArgumentParser(description="Bluetooth low energy scanner")
+    parser.add_argument("--time", type=float, help="czas trwania skanowania w sekundach, użyj 'inf' dla skanowania w nieskonczoność")
+    args = parser.parse_args(args[1:])
     
     scanner = Scanner().withDelegate(ScanDelegate())
-    devices_m = []
     
-    # całkowity czas skonaowania
-    scan_time = 60;
-    start_time = time.time()
-    
-    print("[BLuetooth Low Energy] Skanowanie rozpoczęte")
-    
-    while time.time() - start_time < scan_time:
-        #interwały skanowania (co 10 sekund)
-        devices = scanner.scan(10)
+    if  args.time == float('inf'):
+        print("[BLuetooth Low Energy] Skanowanie rozpoczęte, czas: niesk")
         
-        for dev in devices:
-            name = ""
-            power = ""
-            for (adtype, desc, value) in dev.getScanData():
-                if (desc == "Nazwa urządzenia"):
-                    name = str(value)
-                elif (desc == "Tx Power"):
-                    power = str(value)
- 
-            # Jesli urzadzenia 
-            devices_m.append({'addr': dev.addr, 'addType': dev.addrType, 'rssi': dev.rssi, 'name': name, 'power': power})
- 
-        # standard print
-        # json_devices = json.dumps(devices_m)
-        # print(json_devices)
- 
-        # colored print
-        formatted_json = json.dumps(devices_m, indent=4)
-        colorful_json = highlight(formatted_json, lexers.JsonLexer(), formatters.TerminalFormatter())
-        print(colorful_json)
+        try:
+            while True:
+                devices = scanner.scan(10)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            print("[BLuetooth Low Energy] Skanowanie zakończone")
+    elif args.time:
+        print(f"[BLuetooth Low Energy] Skanowanie rozpoczęte, czas: {args.time} sekund")
+        start_time = time.time()
+        
+        while time.time() - start_time < args.time:
+            devices = scanner.scan(10)
+        print("[BLuetooth Low Energy] Skanowanie zakończone")
+    else:
+        print("Nie podano czasu skanowania, podaj czas skanowania używając --time <czas w sekundach> lub --time inf")
     
-    
-    # Zakończenie skanowania
-    print("[BLuetooth Low Energy] Skanowanie zakończone")
     
     return 0
 
