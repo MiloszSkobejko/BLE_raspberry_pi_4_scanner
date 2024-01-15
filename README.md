@@ -1,4 +1,4 @@
-#Bluetooth Low Energy Scanner on Raspberry Pi 4 (Model B)
+# Bluetooth Low Energy Scanner on Raspberry Pi 4 (Model B)
 This repo contains configuration and source files for bluetooth low energy raspberry pi.
 
 
