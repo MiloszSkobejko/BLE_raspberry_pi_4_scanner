@@ -33,13 +33,17 @@ import argparse
 
 from bluepy.btle import Scanner, DefaultDelegate
 
+# Zmienne środowiskowe dystansu
+Measured_power = -69
+env_n = 2
+
 class ScanDelegate(DefaultDelegate):
     def __init__(self):
         DefaultDelegate.__init__(self)
         
     def handleDiscovery(self, dev, isNewDev, isNewData):
         if isNewDev:
-            print(f"Nowe urzadzenie: {dev.addr}")
+            print(f"Wykryto urzadzenie: {dev.addr}")
             save_to_file(dev)
         elif isNewData:
             print(f"Orzymano nowe dane od urządzenia: {dev.addr}")
@@ -61,6 +65,11 @@ def save_to_file(device):
     # Raw data reserialise for JSON
     rdata = str(device.rawData)
     
+    # Obliczanie dystansu pomiedzy raspberry, a wykrytym urządzeniem
+    distance = 10**((Measured_power-device.rssi) / (10 * env_n))
+    distance = round(distance, 2)
+    
+    
     #Sprawdz, czy plik juz istnieje
     if os.path.exists(filename):
         with open(filename, 'r') as file:
@@ -68,21 +77,82 @@ def save_to_file(device):
         
         # Czy dane urządzenie już zostało dodane
         if not any(entry['addr'] == device.addr for entry in data):
-            data.append({'addr': device.addr, 'addType': device.addrType, 'rssi': device.rssi, 'desc': desc, 'raw data': rdata, 'power': power, 'value': value, 'adType': adtype, 'connectable': device.connectable})
+            
+            data.append({'addr': device.addr, 'addType': device.addrType, 'rssi': device.rssi, 'desc': desc, 'raw data': rdata, 'power': power, 'value': value, 'adType': adtype, 'distance': distance, 'connectable': device.connectable})
             with open(filename, 'w') as file:
                 json.dump(data, file, indent=4)
     else:
         # Jesli plik nie istnieje to stwórz go i zapisz ponownie:
         with open(filename, 'w') as file:
-            json.dump([{'addr': device.addr, 'addType': device.addrType, 'rssi': device.rssi, 'desc': desc, 'raw data': rdata, 'power': power, 'value': value, 'adType': adtype, 'connectable': device.connectable}], file, indent=4)
+            json.dump([{'addr': device.addr, 'addType': device.addrType, 'rssi': device.rssi, 'desc': desc, 'raw data': rdata, 'power': power, 'value': value, 'adType': adtype, 'distance': distance, 'connectable': device.connectable}], file, indent=4)
+
+
+
+def clear_file():
+    
+    filename = "devices.json"
+    
+    if os.path.exists(filename):
+        os.remove(filename)
+        print("devices.json został usuniety")
+    else:
+        print("devices.json nie istnieje w tym katalogu")
+
+
+
+def search_in_dev(search_term):
+    
+    filename = "devices.json"
+    
+    #Sprawdz, czy plik juz istnieje
+    if os.path.exists(filename):
+        with open(filename, 'r') as file:
+            data = json.load(file)
+        
+        devices = [dev for dev in data if any (search_term.lower() in str(value).lower() for value in dev.values())]
+        
+        if devices:
+            print(f"Znalezione urządzenia zawierające fragment '{search_term}' :")
+            for dev in devices:
+                formatted = json.dumps(dev, indent=4)
+                print(formatted)
+        else:
+            print(f"Nie znaleziono urządzeń zawierających fragment '{search_term}'")
+    else:
+        print("devices.json nie istnieje w tym katalogu")
 
 
 
 def main(args):
     parser = argparse.ArgumentParser(description="Bluetooth low energy scanner")
     parser.add_argument("--time", type=float, help="czas trwania skanowania w sekundach, użyj 'inf' dla skanowania w nieskonczoność")
+    parser.add_argument("--clear", action="store_true", help="UWAGA! usuwa plik devices.json")
+    parser.add_argument("--search", type=str, help="wyszukuje ")
+    parser.add_argument("--env", type=int, help="zmienia ustawienia N do obliczania dystansu, ustaw na od 1 do 4")
+    
     args = parser.parse_args(args[1:])
     
+    # Czyszczenie pliku devices.json
+    if args.clear:
+        clear_file()
+        return 0
+    
+    # Szukanie danych urządzenia
+    if args.search:
+        search_in_dev(args.search)
+        return 0
+        
+    # Zmiana ustawienia n:
+    if args.env:
+        if args.env < 1 or args.env > 4:
+            print("błąd! ustaw wartosc od 1 do 4")
+            return 0
+        else:
+            env_n = args.env
+            print(f"ustawiono N na {env_n}")
+            return 0
+    
+    # Odpalanie skanera 
     scanner = Scanner().withDelegate(ScanDelegate())
     
     if  args.time == float('inf'):
