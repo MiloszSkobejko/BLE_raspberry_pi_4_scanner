@@ -32,6 +32,7 @@ import argparse
 #sys.path.append("/home/dron5g/.local/lib/python3.9/site-packages")
 
 from bluepy.btle import Scanner, DefaultDelegate
+from datetime import datetime
 
 # Zmienne środowiskowe dystansu
 Measured_power = -69
@@ -69,6 +70,8 @@ def save_to_file(device):
     distance = 10**((Measured_power-device.rssi) / (10 * env_n))
     distance = round(distance, 2)
     
+    # Data wykrycia urządzenia
+    disc_date = str(datetime.datetime.now())
     
     #Sprawdz, czy plik juz istnieje
     if os.path.exists(filename):
@@ -78,15 +81,14 @@ def save_to_file(device):
         # Czy dane urządzenie już zostało dodane
         if not any(entry['addr'] == device.addr for entry in data):
             
-            data.append({'addr': device.addr, 'addType': device.addrType, 'rssi': device.rssi, 'desc': desc, 'raw data': rdata, 'power': power, 'value': value, 'adType': adtype, 'distance': distance, 'connectable': device.connectable})
+            data.append({'Discovery date': disc_date, 'addr': device.addr, 'addType': device.addrType, 'rssi': device.rssi, 'desc': desc, 'raw data': rdata, 'power': power, 'value': value, 'adType': adtype, 'distance': distance, 'connectable': device.connectable})
             with open(filename, 'w') as file:
                 json.dump(data, file, indent=4)
     else:
         # Jesli plik nie istnieje to stwórz go i zapisz ponownie:
         with open(filename, 'w') as file:
-            json.dump([{'addr': device.addr, 'addType': device.addrType, 'rssi': device.rssi, 'desc': desc, 'raw data': rdata, 'power': power, 'value': value, 'adType': adtype, 'distance': distance, 'connectable': device.connectable}], file, indent=4)
-
-
+            json.dump([{'Discovery date': disc_date, 'addr': device.addr, 'addType': device.addrType, 'rssi': device.rssi, 'desc': desc, 'raw data': rdata, 'power': power, 'value': value, 'adType': adtype, 'distance': distance, 'connectable': device.connectable}], file, indent=4)
+            
 
 def clear_file():
     
