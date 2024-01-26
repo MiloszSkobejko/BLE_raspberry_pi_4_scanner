@@ -29,6 +29,7 @@ import json
 import time
 import os.path
 import argparse
+import requests
 #sys.path.append("/home/dron5g/.local/lib/python3.9/site-packages")
 
 from bluepy.btle import Scanner, DefaultDelegate
@@ -71,7 +72,7 @@ def save_to_file(device):
     distance = round(distance, 2)
     
     # Data wykrycia urządzenia
-    disc_date = str(datetime.datetime.now())
+    disc_date = str(datetime.now())
     
     #Sprawdz, czy plik juz istnieje
     if os.path.exists(filename):
@@ -81,14 +82,35 @@ def save_to_file(device):
         # Czy dane urządzenie już zostało dodane
         if not any(entry['addr'] == device.addr for entry in data):
             
-            data.append({'Discovery date': disc_date, 'addr': device.addr, 'addType': device.addrType, 'rssi': device.rssi, 'desc': desc, 'raw data': rdata, 'power': power, 'value': value, 'adType': adtype, 'distance': distance, 'connectable': device.connectable})
+            data.append({'Discovery date': disc_date, 
+                         'addr': device.addr,
+                         'addType': device.addrType,
+                         'rssi': device.rssi,
+                         'desc': desc,
+                         'raw data': rdata,
+                         'power': power,
+                         'value': value,
+                         'adType': adtype,
+                         'distance': distance,
+                         'connectable': device.connectable,
+                         'on server': 0})
             with open(filename, 'w') as file:
                 json.dump(data, file, indent=4)
     else:
         # Jesli plik nie istnieje to stwórz go i zapisz ponownie:
         with open(filename, 'w') as file:
-            json.dump([{'Discovery date': disc_date, 'addr': device.addr, 'addType': device.addrType, 'rssi': device.rssi, 'desc': desc, 'raw data': rdata, 'power': power, 'value': value, 'adType': adtype, 'distance': distance, 'connectable': device.connectable}], file, indent=4)
-            
+            json.dump([{'Discovery date': disc_date, 
+                         'addr': device.addr,
+                         'addType': device.addrType,
+                         'rssi': device.rssi,
+                         'desc': desc,
+                         'raw data': rdata,
+                         'power': power,
+                         'value': value,
+                         'adType': adtype,
+                         'distance': distance,
+                         'connectable': device.connectable,
+                         'on server': 0}], file, indent=4)
 
 def clear_file():
     
@@ -124,6 +146,40 @@ def search_in_dev(search_term):
         print("devices.json nie istnieje w tym katalogu")
 
 
+def send_to_server():
+    
+    filename = "devices.json"
+    
+    try:
+        if os.path.exists(filename):
+            with open(filename, 'r') as file:
+                devices = json.load(file)
+                
+            server_addr = "http://127.0.0.1:8000/data/"
+            
+            for dev in devices:
+                if dev.get("on server") == 0:
+                    formatted = json.dumps(dev, indent=4)
+                    json_data = {
+                        "device": "Bluetooth Low Energy",
+                        "data": formatted
+                    }
+                    response = requests.post(server_addr, json=json_data)
+                
+                    if response.status_code == 201:
+                        print("[BLuetooth Low Energy] Pomyślnie przesłano dane")
+                        
+                        # Zaznaczenie, że dane urządzenia zostały przesłane na serwer
+                        dev["on server"] = 1
+                    else:
+                        print(f"[BLuetooth Low Energy] Bład podczas przesyłania danych. Kod odpowiedzi: {response.status_code}")
+                        
+            with open(filename, 'w') as file:
+                json.dump(devices, file, indent=4)
+                    
+    except Exception as e:
+        print(f"[BLuetooth Low Energy] [ERR] wystąpił błąd: {str(e)}")
+
 
 def main(args):
     parser = argparse.ArgumentParser(description="Bluetooth low energy scanner")
@@ -131,6 +187,7 @@ def main(args):
     parser.add_argument("--clear", action="store_true", help="UWAGA! usuwa plik devices.json")
     parser.add_argument("--search", type=str, help="wyszukuje ")
     parser.add_argument("--env", type=int, help="zmienia ustawienia N do obliczania dystansu, ustaw na od 1 do 4")
+    parser.add_argument("--send", action="store_true", help="Wysyła devices.json na server")
     
     args = parser.parse_args(args[1:])
     
@@ -142,6 +199,11 @@ def main(args):
     # Szukanie danych urządzenia
     if args.search:
         search_in_dev(args.search)
+        return 0
+        
+    # Przesyłanie danych na serwer
+    if args.send:
+        send_to_server()
         return 0
         
     # Zmiana ustawienia n:
@@ -176,7 +238,6 @@ def main(args):
         print("[BLuetooth Low Energy] Skanowanie zakończone")
     else:
         print("Nie podano czasu skanowania, podaj czas skanowania używając --time <czas w sekundach> lub --time inf")
-    
     
     return 0
 
