@@ -31,13 +31,14 @@ import os.path
 import argparse
 import requests
 #sys.path.append("/home/dron5g/.local/lib/python3.9/site-packages")
-
 from bluepy.btle import Scanner, DefaultDelegate
 from datetime import datetime
 
-# Zmienne środowiskowe dystansu
+# Environmental variables
 Measured_power = -69
 env_n = 2
+server_ip = "http://127.0.0.1:8000/data/"
+filename = "devices.json"
 
 class ScanDelegate(DefaultDelegate):
     def __init__(self):
@@ -45,15 +46,39 @@ class ScanDelegate(DefaultDelegate):
         
     def handleDiscovery(self, dev, isNewDev, isNewData):
         if isNewDev:
-            print(f"Wykryto urzadzenie: {dev.addr}")
+            print(f"[RPi BLE] Device Discovered: {dev.addr}")
             save_to_file(dev)
         elif isNewData:
-            print(f"Orzymano nowe dane od urządzenia: {dev.addr}")
+            print(f"[RPi BLE] Recieved new data from device: {dev.addr}")
 
 
+def set_global_variables(config_path='ble.cfg'):
+    try:
+        if os.path.exists(config_path):
+            with open('ble.cfg', 'r') as file:
+                config = file.readlines()
+            
+            for line in config:
+                parts = line.strip().split('=')
+                if len(parts) == 2:
+                    if parts[0].strip() == 'env_n':
+                        n = int(parts[1].strip())
+                    elif parts[0].strip() == 'Measured_power':
+                        force = float(parts[1].strip())
+                    elif parts[0].strip() == 'server_ip':
+                        ip = parts[1].strip()
+                    elif parts[0].strip() == 'filename':
+                        filename = parts[1].strip()
+            
+            globals()['env_n'] = n
+            globals()['Measured_power'] = force
+            globals()['server_ip'] = ip
+            globals()['filename'] = filename
+
+    except Exception as e:
+        print(f"[RPi BLE] Error while setting config from file {e}")
 
 def save_to_file(device):
-    filename = "devices.json"
     name = ""
     power = ""
     
@@ -67,19 +92,22 @@ def save_to_file(device):
     # Raw data reserialise for JSON
     rdata = str(device.rawData)
     
-    # Obliczanie dystansu pomiedzy raspberry, a wykrytym urządzeniem
+    # Calculating distance between scanning device and discovered device in meters,
+    # distance depends only on rssi and may not be accurate. It's correctness vary
+    # in different enviroments: that's why env_n and measured power variables are handy; 
+    # changing their values can make calculating distance more (or less) accurate 
     distance = 10**((Measured_power-device.rssi) / (10 * env_n))
     distance = round(distance, 2)
     
-    # Data wykrycia urządzenia
+    # Date of discovering device
     disc_date = str(datetime.now())
     
-    #Sprawdz, czy plik juz istnieje
+    # Check if file exists
     if os.path.exists(filename):
         with open(filename, 'r') as file:
             data = json.load(file)
         
-        # Czy dane urządzenie już zostało dodane
+        # Check if device has been already added to devices.json
         if not any(entry['addr'] == device.addr for entry in data):
             
             data.append({'Discovery date': disc_date, 
@@ -97,7 +125,7 @@ def save_to_file(device):
             with open(filename, 'w') as file:
                 json.dump(data, file, indent=4)
     else:
-        # Jesli plik nie istnieje to stwórz go i zapisz ponownie:
+        # If file doesn't exist that create it and save data
         with open(filename, 'w') as file:
             json.dump([{'Discovery date': disc_date, 
                          'addr': device.addr,
@@ -113,22 +141,16 @@ def save_to_file(device):
                          'on server': 0}], file, indent=4)
 
 def clear_file():
-    
-    filename = "devices.json"
-    
     if os.path.exists(filename):
         os.remove(filename)
-        print("devices.json został usuniety")
+        print("[RPi BLE] devices.json has been removed")
     else:
-        print("devices.json nie istnieje w tym katalogu")
+        print("[RPi BLE] devices.json doesn't exist in current directory")
 
 
 
 def search_in_dev(search_term):
-    
-    filename = "devices.json"
-    
-    #Sprawdz, czy plik juz istnieje
+    # Check if file exist in curr directory
     if os.path.exists(filename):
         with open(filename, 'r') as file:
             data = json.load(file)
@@ -136,27 +158,22 @@ def search_in_dev(search_term):
         devices = [dev for dev in data if any (search_term.lower() in str(value).lower() for value in dev.values())]
         
         if devices:
-            print(f"Znalezione urządzenia zawierające fragment '{search_term}' :")
+            print(f"[RPi BLE] Found devices containg searched phrase: '{search_term}' :")
             for dev in devices:
                 formatted = json.dumps(dev, indent=4)
                 print(formatted)
         else:
-            print(f"Nie znaleziono urządzeń zawierających fragment '{search_term}'")
+            print(f"[RPi BLE] Devices containg searched phrase not found'{search_term}'")
     else:
-        print("devices.json nie istnieje w tym katalogu")
+        print("[RPi BLE] devices.json doesn't exist in current directory")
 
 
 def send_to_server():
-    
-    filename = "devices.json"
-    
     try:
         if os.path.exists(filename):
             with open(filename, 'r') as file:
                 devices = json.load(file)
                 
-            server_addr = "http://127.0.0.1:8000/data/"
-            
             for dev in devices:
                 if dev.get("on server") == 0:
                     formatted = json.dumps(dev, indent=4)
@@ -164,63 +181,64 @@ def send_to_server():
                         "device": "Bluetooth Low Energy",
                         "data": formatted
                     }
-                    response = requests.post(server_addr, json=json_data)
+                    response = requests.post(server_ip, json=json_data)
                 
                     if response.status_code == 201:
-                        print("[BLuetooth Low Energy] Pomyślnie przesłano dane")
+                        print("[RPi BLE] data sent succesfully")
                         
-                        # Zaznaczenie, że dane urządzenia zostały przesłane na serwer
+                        # If device data has been sent to server, on server field is changed to 1
+                        # in order to avoid duplicates
                         dev["on server"] = 1
                     else:
-                        print(f"[BLuetooth Low Energy] Bład podczas przesyłania danych. Kod odpowiedzi: {response.status_code}")
+                        print(f"[RPi BLE] Error while sending data. Error code: {response.status_code}")
                         
             with open(filename, 'w') as file:
                 json.dump(devices, file, indent=4)
                     
     except Exception as e:
-        print(f"[BLuetooth Low Energy] [ERR] wystąpił błąd: {str(e)}")
+        print(f"[RPi BLE] Error found: {str(e)}")
 
 
 def main(args):
     parser = argparse.ArgumentParser(description="Bluetooth low energy scanner")
-    parser.add_argument("--time", type=float, help="czas trwania skanowania w sekundach, użyj 'inf' dla skanowania w nieskonczoność")
-    parser.add_argument("--clear", action="store_true", help="UWAGA! usuwa plik devices.json")
-    parser.add_argument("--search", type=str, help="wyszukuje ")
-    parser.add_argument("--env", type=int, help="zmienia ustawienia N do obliczania dystansu, ustaw na od 1 do 4")
-    parser.add_argument("--send", action="store_true", help="Wysyła devices.json na server")
+    parser.add_argument("--time", type=float, help="scan time in seconds, use 'inf' for infinite scanning")
+    parser.add_argument("--clear", action="store_true", help="WARNING! deletes devices.json")
+    parser.add_argument("--search", type=str, help="search given string in devices.json and prints all device data, which contain serached phrase")
+    parser.add_argument("--env", type=int, help="changes N variable, set it from 1 to 4")
+    parser.add_argument("--send", action="store_true", help="sends devices.json data to server")
     
     args = parser.parse_args(args[1:])
     
-    # Czyszczenie pliku devices.json
+    # Deleting devices.json
     if args.clear:
         clear_file()
         return 0
     
-    # Szukanie danych urządzenia
+    # Searching for phrase 
     if args.search:
         search_in_dev(args.search)
         return 0
         
-    # Przesyłanie danych na serwer
+    # Sending data to servers
     if args.send:
         send_to_server()
         return 0
         
-    # Zmiana ustawienia n:
+    # Changes env_n variable value
     if args.env:
         if args.env < 1 or args.env > 4:
-            print("błąd! ustaw wartosc od 1 do 4")
+            print("[RPi BLE] Error! set it from 1 to 4")
             return 0
         else:
             env_n = args.env
-            print(f"ustawiono N na {env_n}")
+            print(f"[RPi BLE] N value (env_n) changed to {env_n}")
             return 0
     
-    # Odpalanie skanera 
+    
     scanner = Scanner().withDelegate(ScanDelegate())
     
     if  args.time == float('inf'):
-        print("[BLuetooth Low Energy] Skanowanie rozpoczęte, czas: niesk")
+        print("[RPi BLE] Starting scanning, time: infinite")
         
         try:
             while True:
@@ -228,16 +246,16 @@ def main(args):
         except KeyboardInterrupt:
             pass
         finally:
-            print("[BLuetooth Low Energy] Skanowanie zakończone")
+            print("[RPi BLE] Scanning completed")
     elif args.time:
-        print(f"[BLuetooth Low Energy] Skanowanie rozpoczęte, czas: {args.time} sekund")
+        print(f"[RPi BLE] Starting scanning, time: {args.time} seconds")
         start_time = time.time()
         
         while time.time() - start_time < args.time:
             devices = scanner.scan(10)
-        print("[BLuetooth Low Energy] Skanowanie zakończone")
+        print("[RPi BLE] Scanning completed")
     else:
-        print("Nie podano czasu skanowania, podaj czas skanowania używając --time <czas w sekundach> lub --time inf")
+        print("Scan time wasn't scecified, set scan time using --time <time in seconds> or --time inf")
     
     return 0
 
