@@ -5,19 +5,25 @@ in the same directory where python script is executed.
 
 
 ## Getting started
-Please check if your device has bluez as well as bluepy installed. if not, you can install bluez using:
+Raspbian should have bluez already installed, check it on your device. Updating is recommended. 
 ```
-sudo apt-get install bluez
+sudo apt-get update
+```
+
+If bluez is not installed, you can install it using:
+```
+sudo apt-get install bluez 
+```
+
+Now you need only bluepy and libglib2.0-dev
+
+```
 sudo apt-get install libglib2.0-dev
+sudo pip install bluepy
 ```
 
 I also created script for installing it manually, but it's much safer to do it with apt install.
 Do not use this script, unless you are sure what you are doing.
-
-```
-sudo pip install bluepy
-```
-These are all packages you'll need in order to get started with ble.
 
 
 ## How to use it
